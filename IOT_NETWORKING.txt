@@ -1,0 +1,156 @@
+##### CONFIGURACION NETWORKING PARA IOT ######
+
+## 1 - Crear device dot1q (VLAN 111) (br-lan.111) sobre bridge lan (br-lan)
+## LUCI: > network > interfaces > devices
+## /etc/config/network
+
+config device
+        option type '8021q'
+        option ifname 'br-lan'
+        option vid '111'
+        option name 'br-lan.111'
+		
+## 2 - Crear device bridge (br-lan-iot) solo con device "br-lan.111"
+## LUCI: > network > interfaces > devices
+## /etc/config/network	
+
+config device
+        option type 'bridge'
+        option name 'br-lan-iot'
+        list ports 'br-lan.111'
+
+## 3 - Crear interface static address sobre bridge "br-lan-iot" para dotar de nivel 3 a LA VLAN 111 (IOT)
+## LUCI: > network > interfaces > interfaces
+## /etc/config/network	
+
+config interface 'lan_iot'
+        option proto 'static'
+        option device 'br-lan-iot'
+        option ipaddr '192.168.111.1'
+        option netmask '255.255.255.0'
+
+	## 3.1 - Habilitar DHCP sobre interface lan_iot.	
+	## LUCI: > network > interfaces > lan_iot > DHCP Server
+	## /etc/config/dhcp		
+	
+	config dhcp 'lan_iot'
+			option interface 'lan_iot'
+			option start '100'
+			option limit '150'
+			option leasetime '1h'
+			option force '1'
+		
+## 4 - Crear nueva red wifi asociada a interfaz física radio2 (2,4G + 5G) y asociar a network "lan_iot"
+LUCI: > network > wireless > Wireless Overview > add
+/etc/config/wireless
+
+config wifi-iface 'wifinet4'
+        option device 'radio2'
+        option mode 'ap'
+        option ssid 'WIFI-IOT'
+        option encryption 'psk2+ccmp'
+        option key '$keykeykeykeykeykeykeykey$'
+        option max_inactivity '3600'
+        option disassoc_low_ack '0'
+        option network 'lan_iot'
+        option isolate '1'                ## Evitar visibilidad entre equipos IOT.
+        option macaddr 'random'           ## MAC aleatoria para la interfaz (evita geolocalización)
+		
+		
+## 5 - Editar device bridge (br-lan-iot) y añadir la interfaz WiFi recién creada (phy2-ap1)
+## Esta interfaz WiFi no aparece en el listado de "bridge ports", hay que añadirlo escribiéndolo manualmente en la casilla "custom" del final del listado.
+## LUCI: > network > interfaces > devices
+## /etc/config/network	
+
+config device
+        option type 'bridge'
+        option name 'br-lan-iot'
+        list ports 'br-lan.111'
+        list ports 'phy2-ap1'	     
+
+
+
+##### CONFIGURACION SEGURIDAD ######
+
+
+
+## 6 - Crear zona firewall "lan_iot" seleccionando Covered networks "lan_iot". 
+## LUCI: > network > firewall > zones
+## /etc/config/firewall
+
+config zone
+        option name 'lan_iot'
+        option input 'ACCEPT'
+        option output 'ACCEPT'
+        option forward 'ACCEPT'
+        list network 'lan_iot'
+
+	## 6.1 Habilitar forwarding lan_iot -> wan  (permitir salida a Internet)  		
+
+	config forwarding
+			option src 'lan_iot'
+			option dest 'wan'
+			
+	## 6.2 Habilitar forwarding lan -> lan_iot  (permitir acceso desde lan a lan_iot, pero no al revés)
+			
+	config forwarding
+			option src 'lan'
+			option dest 'lan_iot'
+
+	## 6.3 Crear regla de firewall que permita acceso al puerto 53/UDP (para acceso desde IOT a DNS)
+	## LUCI: > network > firewall > traffic rules
+
+	config rule
+			option name 'Allow_IOT_LAN-Input_Router_DNS'
+			option src 'lan_iot'
+			list src_ip '192.168.111.0/24'
+			option target 'ACCEPT'
+			list proto 'udp'
+			list dest_ip '192.168.111.1'
+			option dest_port '53'
+
+	## 6.4 Crear regla de firewall para bloquear cualquier otro acceso de la lan_iot al router
+
+	config rule
+			option name 'Block_IOT_LAN-Input_Router'
+			option src 'lan_iot'
+			list src_ip '192.168.111.0/24'
+			option target 'DROP'
+			list proto 'all'
+	
+			
+	## 6.5 Crear regla de firewall para bloquear forwarding a través de interfaz lan (192.168.1.1)
+
+	config rule
+			option name 'Block_IOT_LAN-Forward_Router'
+			option src 'lan_iot'
+			list src_ip '192.168.111.0/24'
+			option target 'DROP'
+			list dest_ip '192.168.1.1'
+			option dest 'lan'
+			list proto 'all'			
+
+
+##### PRUEBAS ######	
+
+## Conectarse a WIFI IOT y verificar acceso DNS 192.168.111.1
+## Conectarse a WIFI IOT y verificar acceso a internet.
+## Conectarse a WIFI IOT y verificar que no se accede a ningún elemento de lan (ni siquiera 192.168.1.1).
+## Conectarse a WIFI IOT y verificar que no hay acceso entre dispositivos IOT.
+## Validar desde un equipo conectado a lan y wifi (no iot) que se accede correctamente a equipos de la red IOT.
+
+##### NOTAS ######	
+
+## Si se desea conectar un equipo por cable a la red IOT puede hacerse de dos formas:
+## Sacando uno de los puertos Ethernet del bridge LAN (br-lan) y añadiéndolo al bridge IoT  ** Equivalente a un puerto en modo acceso    
+## Pasando la VLAN 111 por uno de los ethernet (manteniendo) ** Equivalente a modo tagged, ej:
+## LUCI: > network > interfaces > devices > add
+## /etc/config/network	
+
+config device
+        option type '8021q'
+        option ifname 'lan1'
+        option vid '111'
+        option name 'lan1.111'
+
+

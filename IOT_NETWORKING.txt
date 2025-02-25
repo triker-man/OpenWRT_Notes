@@ -80,9 +80,9 @@ config device
 
 config zone
         option name 'lan_iot'
-        option input 'ACCEPT'
+        option input 'DROP'
         option output 'ACCEPT'
-        option forward 'ACCEPT'
+        option forward 'DROP'
         list network 'lan_iot'
 
 	## 6.1 Habilitar forwarding lan_iot -> wan  (permitir salida a Internet)  		
@@ -97,45 +97,42 @@ config zone
 			option src 'lan'
 			option dest 'lan_iot'
 
-	## 6.3 Crear regla de firewall que permita acceso al puerto 53/UDP (para acceso desde IOT a DNS)
+	## 6.3 Crear regla de firewall que permita obtención de IP por DHCP (puerto UDP 67,68) y acceso desde IOT a DNS (puerto 53/UDP)
 	## LUCI: > network > firewall > traffic rules
 
+	
 	config rule
-			option name 'Allow_IOT_LAN-Input_Router_DNS'
-			option src 'lan_iot'
-			list src_ip '192.168.111.0/24'
-			option target 'ACCEPT'
-			list proto 'udp'
-			list dest_ip '192.168.111.1'
-			option dest_port '53'
+        		option name 'Allow_IOT_LAN-Input_Router_DNSyDHCP'
+        		option src 'lan_iot'
+        		option target 'ACCEPT'
+        		list proto 'udp'
+        		option dest_port '53 67 68'
 
 	## 6.4 Crear regla de firewall para bloquear cualquier otro acceso de la lan_iot al router
 
 	config rule
-			option name 'Block_IOT_LAN-Input_Router'
-			option src 'lan_iot'
-			list src_ip '192.168.111.0/24'
-			option target 'DROP'
-			list proto 'all'
-	
-			
-	## 6.5 Crear regla de firewall para bloquear forwarding a través de interfaz lan (192.168.1.1)
+	        	option name 'Block_IOT_LAN-Input_Router'
+	        	option src 'lan_iot'
+	        	option target 'DROP'
+	        	list proto 'all'
+				
+	## 6.5 Crear regla de firewall para bloquear forwarding a LAN desde IPs de LAN_IOT
 
 	config rule
-			option name 'Block_IOT_LAN-Forward_Router'
-			option src 'lan_iot'
-			list src_ip '192.168.111.0/24'
-			option target 'DROP'
-			list dest_ip '192.168.1.1'
-			option dest 'lan'
-			list proto 'all'			
+	        option name 'Block_IOT_LAN-Forward_Router'
+	        option src 'lan_iot'
+	        list src_ip '192.168.111.0/24'
+	        option target 'DROP'
+	        option dest 'lan'
+	        list proto 'all'			
 
 
 ##### PRUEBAS ######	
 
-## Conectarse a WIFI IOT y verificar acceso DNS 192.168.111.1
+## Conectarse a WIFI IOT y verificar acceso DHCP y DNS 192.168.111.1
 ## Conectarse a WIFI IOT y verificar acceso a internet.
 ## Conectarse a WIFI IOT y verificar que no se accede a ningún elemento de lan (ni siquiera 192.168.1.1).
+## Conectarse a WIFI IOT y verificar que no se accede a ningún elemento de otra red enrutada en OpenWRT (tailscale, wireguard, etc...)
 ## Conectarse a WIFI IOT y verificar que no hay acceso entre dispositivos IOT.
 ## Validar desde un equipo conectado a lan y wifi (no iot) que se accede correctamente a equipos de la red IOT.
 
